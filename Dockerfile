@@ -1,7 +1,12 @@
 # =============================================================================
 # Strav — Production Dockerfile
 # Runtime: Bun (oven/bun:1-alpine)
-# Stages:  deps → builder → runner
+# Stages:  deps → builder → builder-no-modules → runner
+#
+# builder-no-modules exists solely so the runner COPY gets no node_modules
+# from the builder stage without needing the --exclude flag (BuildKit 1.7+).
+# Dev compose uses `target: builder`, which retains full node_modules and
+# never reaches builder-no-modules.
 # =============================================================================
 
 # ── Stage 1: Production dependencies ─────────────────────────────────────────
@@ -25,8 +30,11 @@ COPY . .
 # Remove this line if your app is API-only.
 RUN bun run --if-present build
 
-# Remove node_modules so COPY --from=builder in the runner stage never pulls
-# them in — the runner stage supplies its own production-only deps from deps.
+
+# ── Stage 2b: Source only (no node_modules) ──────────────────────────────────
+# Extends builder so the runner COPY picks up no node_modules.
+# Dev compose stops at `target: builder` and never reaches this stage.
+FROM builder AS builder-no-modules
 RUN rm -rf node_modules
 
 
@@ -47,12 +55,11 @@ RUN addgroup --system --gid 1001 strav \
 # BusyBox nc varies by build; netcat-openbsd guarantees -z and -w support.
 RUN apk add --no-cache netcat-openbsd
 
-# Application source + built assets from builder stage (node_modules already
-# removed there — see builder stage above).
-COPY --from=builder --chown=strav:strav /app .
+# Application source + built assets (node_modules stripped in builder-no-modules)
+COPY --from=builder-no-modules --chown=strav:strav /app .
 
 # Production-only node_modules (no devDependencies)
-COPY --from=deps    --chown=strav:strav /app/node_modules ./node_modules
+COPY --from=deps               --chown=strav:strav /app/node_modules ./node_modules
 
 # Entrypoint (handles migrations + graceful process selection)
 COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/entrypoint.sh
