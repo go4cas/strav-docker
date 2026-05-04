@@ -49,7 +49,7 @@ Docker environment for [Strav](https://strav.dev) — the Bun backend framework.
 |------|---------|
 | Docker Engine | 24+ |
 | Docker Compose plugin (`docker compose`) | v2.20+ |
-| `gh` CLI | any (for GitHub operations) |
+| Bun | 1.0+ |
 
 > **Note:** This setup uses the Compose v2 plugin (`docker compose`), not the legacy `docker-compose` v1 binary.
 
@@ -57,24 +57,41 @@ Docker environment for [Strav](https://strav.dev) — the Bun backend framework.
 
 ## Development setup
 
-### 1. Clone and configure environment
+### 1. Scaffold a new Strav application
+
+This repo is a Docker template — it needs a Strav application alongside it to build and run. The easiest way to get started is to scaffold the app directly into a clone of this repo:
 
 ```bash
+# Clone the Docker template into your project directory
 git clone https://github.com/go4cas/strav-docker.git my-app
 cd my-app
+
+# Scaffold a Strav app into the same directory
+bunx @strav/spring . --web --db=my_app_db
+```
+
+**Adding Docker to an existing Strav project** — copy the files instead:
+
+```bash
+cp -r /path/to/strav-docker/{Dockerfile,docker-compose.yml,docker-compose.prod.yml,\
+Caddyfile,docker-entrypoint.sh,.dockerignore,.env.example,.env.prod.example} .
+```
+
+### 2. Configure environment
+
+```bash
 cp .env.example .env
 ```
 
 Edit `.env` and set at minimum:
 
 ```bash
-APP_KEY=   # required — generate a random value:
-           # openssl rand -base64 32
+APP_KEY=   # required — generate with: openssl rand -base64 32
 ```
 
 All other values in `.env.example` are pre-set for the local Docker network and work out of the box.
 
-### 2. Start the stack
+### 3. Start the stack
 
 ```bash
 # Web server + PostgreSQL + Caddy (minimum)
@@ -89,7 +106,7 @@ docker compose --profile full up
 
 The app is available at **http://localhost** (Caddy proxies to the Bun process on port 3000).
 
-### 3. Trust Caddy's local CA (HTTPS in dev)
+### 4. Trust Caddy's local CA (HTTPS in dev)
 
 Caddy issues a self-signed certificate from its local CA on first boot. To avoid browser warnings:
 
@@ -99,7 +116,7 @@ docker compose exec caddy caddy trust
 
 After trusting, the site is also available at **https://localhost**.
 
-### 4. Run database migrations
+### 5. Run database migrations
 
 Migrations run automatically when the `web` container starts. To run them manually:
 
@@ -116,11 +133,11 @@ docker compose exec web bun strav fresh                # drop all tables and reb
 docker compose exec web bun strav seed                 # seed test data
 ```
 
-### 5. Hot reload
+### 6. Hot reload
 
 The entire project directory is mounted into the `web` container (`bun run dev` uses Bun's built-in file watcher). Save a file — the process restarts automatically. Node modules are isolated in a named volume so host `node_modules/` never interferes.
 
-### 6. Running tests
+### 7. Running tests
 
 ```bash
 docker compose exec web bun test
