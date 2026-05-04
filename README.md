@@ -112,13 +112,26 @@ The app is available at **http://localhost** (Caddy proxies to the Bun process o
 
 ### 4. Trust Caddy's local CA (HTTPS in dev)
 
-Caddy issues a self-signed certificate from its local CA on first boot. To avoid browser warnings:
+Caddy issues a certificate from its own local CA on first boot. To avoid browser warnings you need to install that CA on the **host machine** — running `caddy trust` inside the container only affects the container's trust store, not your browser.
 
+**macOS**
 ```bash
-docker compose exec caddy caddy trust
+docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt caddy-root.crt
+sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain caddy-root.crt
+rm caddy-root.crt
 ```
 
-After trusting, the site is also available at **https://localhost**.
+**Linux** (Debian/Ubuntu)
+```bash
+docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt caddy-root.crt
+sudo cp caddy-root.crt /usr/local/share/ca-certificates/caddy-local.crt
+sudo update-ca-certificates
+rm caddy-root.crt
+```
+
+After installing, **fully quit and reopen your browser** (a new tab is not enough — Chrome and Safari reload the trust store only on restart).
+
+The site is then available at **https://localhost**. The certificate persists in the `caddy_data` volume, so you only need to do this once per machine.
 
 ### 5. Run database migrations
 
