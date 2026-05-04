@@ -59,23 +59,27 @@ Docker environment for [Strav](https://strav.dev) — the Bun backend framework.
 
 ### 1. Scaffold a new Strav application
 
-This repo is a Docker template — it needs a Strav application alongside it to build and run. The easiest way to get started is to scaffold the app directly into a clone of this repo:
+This repo is a Docker template — it needs a Strav application alongside it to build and run. Scaffold the app first, then copy the Docker files in:
 
 ```bash
-# Clone the Docker template into your project directory
-git clone https://github.com/go4cas/strav-docker.git my-app
+# 1. Create a new Strav app
+bunx @strav/spring my-app --web --db=my_app_db
 cd my-app
 
-# Scaffold a Strav app into the same directory
-bunx @strav/spring . --web --db=my_app_db
+# 2. Copy the Docker files from this template into the app directory
+curl -fsSL https://github.com/go4cas/strav-docker/archive/refs/heads/main.tar.gz \
+  | tar -xz --strip-components=1 strav-docker-main
 ```
 
-**Adding Docker to an existing Strav project** — copy the files instead:
+Alternatively, if you have already cloned this repo:
 
 ```bash
-cp -r /path/to/strav-docker/{Dockerfile,docker-compose.yml,docker-compose.prod.yml,\
-Caddyfile,docker-entrypoint.sh,.dockerignore,.env.example,.env.prod.example} .
+cp /path/to/strav-docker/{Dockerfile,docker-compose.yml,docker-compose.prod.yml,\
+Caddyfile,docker-entrypoint.sh,.dockerignore,.env.example,.env.prod.example} my-app/
+cd my-app
 ```
+
+**Adding Docker to an existing Strav project** — run the `cp` command above from your project root.
 
 ### 2. Configure environment
 
