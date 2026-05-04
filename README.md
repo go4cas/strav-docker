@@ -250,8 +250,9 @@ In **production** all services (including `worker` and `scheduler`) start uncond
 | Variable | Default (dev) | Description |
 |----------|---------------|-------------|
 | `APP_ENV` | `local` | `local` or `production` |
-| `APP_KEY` | _(empty)_ | Application encryption key. Generate once with `bun strav generate:key`. |
+| `APP_KEY` | _(empty)_ | Application encryption key. Generate with `openssl rand -base64 32`. |
 | `APP_DOMAIN` | `localhost` | Public hostname. Used by Caddy for TLS and virtual hosting. |
+| `APP_URL` | `http://localhost` | Full base URL. Required by Strav's HTTP config. Use `https://` in production. |
 
 ### Database
 
