@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.7
 # =============================================================================
 # Strav — Production Dockerfile
 # Runtime: Bun (oven/bun:1-alpine)
@@ -26,6 +25,10 @@ COPY . .
 # Remove this line if your app is API-only.
 RUN bun run build --if-present
 
+# Remove node_modules so COPY --from=builder in the runner stage never pulls
+# them in — the runner stage supplies its own production-only deps from deps.
+RUN rm -rf node_modules
+
 
 # ── Stage 3: Lean production runner ──────────────────────────────────────────
 FROM oven/bun:1-alpine AS runner
@@ -44,9 +47,9 @@ RUN addgroup --system --gid 1001 strav \
 # BusyBox nc varies by build; netcat-openbsd guarantees -z and -w support.
 RUN apk add --no-cache netcat-openbsd
 
-# Application source + built assets from builder stage.
-# node_modules is explicitly excluded — we supply production-only deps below.
-COPY --from=builder --chown=strav:strav --exclude=node_modules /app .
+# Application source + built assets from builder stage (node_modules already
+# removed there — see builder stage above).
+COPY --from=builder --chown=strav:strav /app .
 
 # Production-only node_modules (no devDependencies)
 COPY --from=deps    --chown=strav:strav /app/node_modules ./node_modules
