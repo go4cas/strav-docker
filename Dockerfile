@@ -23,7 +23,7 @@ COPY . .
 
 # Build frontend assets (Vue islands, CSS bundles, etc.) if the script exists.
 # Remove this line if your app is API-only.
-RUN bun run build --if-present
+RUN bun run --if-present build
 
 # Remove node_modules so COPY --from=builder in the runner stage never pulls
 # them in — the runner stage supplies its own production-only deps from deps.
