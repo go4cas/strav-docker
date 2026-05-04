@@ -1,0 +1,130 @@
+# =============================================================================
+# Strav — Docker Compose  (development)
+#
+# Usage:
+#   docker compose up                        # caddy + web + db
+#   docker compose --profile worker up       # + queue worker + redis
+#   docker compose --profile scheduler up    # + scheduler
+#   docker compose --profile full up         # everything
+#
+# Access: http://localhost  (Caddy proxies to web:3000)
+# Caddy uses its local CA for HTTPS in dev — trust it once with:
+#   docker compose exec caddy caddy trust
+# =============================================================================
+
+name: strav-dev
+
+# ── Shared environment variables ─────────────────────────────────────────────
+x-app-env: &app-env
+  APP_ENV: local
+  DB_HOST: db
+  DB_PORT: "5432"
+  DB_USER: postgres
+  DB_PASSWORD: postgres
+  DB_DATABASE: my_app
+  REDIS_URL: redis://redis:6379
+
+x-app-base: &app-base
+  build:
+    context: .
+    target: builder   # dev stage — includes devDependencies
+  env_file: .env
+  environment:
+    <<: *app-env
+  volumes:
+    - .:/app
+    - strav_node_modules:/app/node_modules
+  depends_on:
+    db:
+      condition: service_healthy
+  restart: "no"
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: my_app
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d my_app"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: "no"
+    profiles: [worker, full]
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"     # HTTP/3
+    environment:
+      APP_DOMAIN: localhost
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./public:/srv/public:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: "no"
+
+  web:
+    <<: *app-base
+    command: bun run dev
+    environment:
+      <<: *app-env
+      STRAV_PROCESS: web
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  worker:
+    <<: *app-base
+    command: bun strav queue:work
+    environment:
+      <<: *app-env
+      STRAV_PROCESS: worker
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles: [worker, full]
+
+  scheduler:
+    <<: *app-base
+    command: bun strav schedule
+    environment:
+      <<: *app-env
+      STRAV_PROCESS: scheduler
+    profiles: [scheduler, full]
+
+volumes:
+  pgdata:
+  redis_data:
+  caddy_data:
+  caddy_config:
+  strav_node_modules:

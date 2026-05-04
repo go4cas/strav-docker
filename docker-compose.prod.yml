@@ -1,0 +1,175 @@
+# =============================================================================
+# Strav — Docker Compose  (production override)
+#
+# Apply on top of docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Or export once in your shell / CI environment:
+#   export COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
+#
+# Prerequisites:
+#   1. docker compose build
+#   2. Populate .env.prod  (see .env.prod.example)
+#   3. DNS A record for APP_DOMAIN pointing at this server
+#      (Caddy will obtain the Let's Encrypt cert on first boot)
+#
+# NOTE: `deploy.replicas` requires the Docker Compose v2 plugin (`docker compose`),
+# not the legacy docker-compose v1 binary. The `deploy.restart_policy` sub-key is
+# Docker Swarm-only and is silently ignored by plain Compose; the top-level
+# `restart: unless-stopped` from prod-base governs restarts in non-Swarm deployments.
+# =============================================================================
+
+name: strav
+
+x-prod-base: &prod-base
+  build:
+    context: .
+    target: runner          # lean, non-root production image
+  image: strav-app:latest   # build once, reuse across all app services
+  env_file: .env.prod
+  restart: unless-stopped
+  volumes:
+    # Persist logs, uploads, and compiled view cache across container restarts.
+    - strav_storage:/app/storage
+
+services:
+
+  db:
+    image: postgres:17-alpine
+    env_file: .env.prod
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_DATABASE}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_DATABASE}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+    ports: []
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save 300 1 --loglevel warning --requirepass ${REDIS_PASSWORD}
+    env_file: .env.prod
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    env_file: .env.prod
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"       # HTTP/3 (QUIC)
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # public/ must exist on the host and contain built static assets.
+      # For image-only deploys (no source checkout on server), copy assets
+      # out of the builder stage during CI before running compose:
+      #   docker create --name tmp strav-app:latest
+      #   docker cp tmp:/app/public ./public && docker rm tmp
+      - ./public:/srv/public:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+  migrate:
+    <<: *prod-base
+    command: bun run start    # CMD is ignored — entrypoint exits after migrate
+    environment:
+      STRAV_PROCESS: migrate
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: none
+
+  web:
+    <<: *prod-base
+    command: bun run start
+    environment:
+      STRAV_PROCESS: web
+    ports: []
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+  worker:
+    <<: *prod-base
+    command: bun strav queue:work
+    environment:
+      STRAV_PROCESS: worker
+    profiles: []
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+  scheduler:
+    <<: *prod-base
+    command: bun strav schedule
+    environment:
+      STRAV_PROCESS: scheduler
+    profiles: []
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    deploy:
+      replicas: 1      # MUST remain 1 — multiple schedulers would double-fire jobs
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+volumes:
+  pgdata:
+  redis_data:
+  strav_storage:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,50 @@
+# =============================================================================
+# .dockerignore — Strav
+# Keeps the build context small and prevents secrets from leaking into layers.
+# =============================================================================
+
+# Dependencies (reinstalled inside the image)
+node_modules/
+bun.lockb       # older binary lockfile format; this project uses bun.lock (text).
+                # Remove this line if your project still uses bun.lockb.
+
+# Environment / secrets
+.env
+.env.*
+!.env.example   # keep the example as documentation
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docker files (don't need themselves inside the image)
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Editor / OS noise
+.vscode/
+.idea/
+*.code-workspace
+.DS_Store
+Thumbs.db
+
+# Local dev artefacts
+*.local
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test output
+coverage/
+*.test.ts.snap
+
+# Temp / cache
+.cache/
+tmp/
+temp/
+
+# Strav runtime output — should never be baked into the image
+storage/

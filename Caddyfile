@@ -1,0 +1,82 @@
+# =============================================================================
+# Caddyfile — Strav reverse proxy
+#
+# APP_DOMAIN is injected from the environment:
+#   dev:  APP_DOMAIN=localhost
+#   prod: APP_DOMAIN=example.com
+#
+# In production Caddy obtains and renews TLS certificates automatically
+# via Let's Encrypt. No extra config needed — just point your DNS A record
+# at the server before first boot.
+# =============================================================================
+
+{$APP_DOMAIN} {
+
+    root * /srv/public
+
+    # ── Static assets ─────────────────────────────────────────────────────────
+    # If the request path resolves to a file on disk, serve it directly.
+    # Everything else falls through to the reverse proxy below.
+    @static {
+        file {
+            try_files {path} {path}/index.html
+        }
+    }
+    handle @static {
+        file_server
+    }
+
+    # ── Reverse proxy → Strav ─────────────────────────────────────────────────
+    handle {
+        reverse_proxy web:3000 {
+            # Pass real client IP so Strav can log/rate-limit correctly
+            header_up X-Real-IP         {remote_host}
+            header_up X-Forwarded-For   {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+
+            # Healthy upstream check
+            health_uri      /health
+            health_interval 10s
+            health_timeout  5s
+        }
+    }
+
+    # ── Compression ───────────────────────────────────────────────────────────
+    encode zstd gzip
+
+    # ── Security headers ──────────────────────────────────────────────────────
+    header {
+        # Hide that you're running Caddy
+        -Server
+
+        # Prevent MIME-type sniffing
+        X-Content-Type-Options "nosniff"
+
+        # Clickjacking protection
+        X-Frame-Options "SAMEORIGIN"
+
+        # Referrer policy
+        Referrer-Policy "strict-origin-when-cross-origin"
+
+        # HSTS — enable only after confirming TLS is permanently stable.
+        # WARNING: once enabled with `preload` and submitted to hstspreload.org,
+        # the domain is locked to HTTPS in browsers — this is effectively
+        # irreversible. Do not add `preload` unless you intend it permanently.
+        # Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+        # CSP — tighten for your app's actual needs
+        # Content-Security-Policy "default-src 'self'"
+
+        # Permissions policy
+        Permissions-Policy "geolocation=(), microphone=(), camera=()"
+
+        defer  # apply after upstream sets its own headers
+    }
+
+    # ── Logging ───────────────────────────────────────────────────────────────
+    log {
+        output stdout
+        format json
+        level  INFO
+    }
+}
