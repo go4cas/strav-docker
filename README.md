@@ -68,7 +68,8 @@ cp .env.example .env
 Edit `.env` and set at minimum:
 
 ```bash
-APP_KEY=   # required — generate with: bun strav generate:key
+APP_KEY=   # required — generate a random value:
+           # openssl rand -base64 32
 ```
 
 All other values in `.env.example` are pre-set for the local Docker network and work out of the box.
@@ -143,7 +144,7 @@ Fill in every value — none have safe defaults in production:
 
 | Variable | Notes |
 |----------|-------|
-| `APP_KEY` | Generate with `bun strav generate:key`. Rotate with care. |
+| `APP_KEY` | Generate with `openssl rand -base64 32`. Rotate with care. |
 | `APP_DOMAIN` | The public domain (`example.com`). DNS A record must point here before first boot. |
 | `DB_USER` / `DB_PASSWORD` / `DB_DATABASE` | Use a strong password. |
 | `REDIS_PASSWORD` | Required — the Redis service is started with `--requirepass`. |
@@ -263,7 +264,7 @@ In **production** all services (including `worker` and `scheduler`) start uncond
 docker compose exec web sh
 
 # Generate a new application key
-docker compose exec web bun strav generate:key
+openssl rand -base64 32
 
 # Generate models from the current schema
 docker compose exec web bun strav generate:models
