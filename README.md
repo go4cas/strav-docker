@@ -60,8 +60,8 @@ Docker environment for [Strav](https://strav.dev) — the Bun backend framework.
 ### 1. Clone and configure environment
 
 ```bash
-git clone https://github.com/go4cas/strav-docker.git
-cd strav-docker
+git clone https://github.com/go4cas/strav-docker.git my-app
+cd my-app
 cp .env.example .env
 ```
 
